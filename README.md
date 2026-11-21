@@ -70,8 +70,8 @@
 | **V2** | Baseline Ensemble (DINO+ViT+EffB4) ❌ 결과 앙상블 | 0.6781 | 결과 앙상블은 규정상 금지. |
 | **V7** | Pseudo Labeling (3% Injection) ❌ 위반 | 0.7038 | Test Set을 학습에 쓴 결과라 성과로 보지 않음. |
 | **V10** | Pseudo (10x) + FewShot ❌ 위반 | 0.7215 | 위와 같음. |
-| **V15** | ConvNeXt (Blur Augmentation) | 0.7193 | 화질 증강이 일부 도움되나, 라벨 노이즈 문제 발생 가능성. |
-| **V17** | Video Model (CNN+LSTM) | 0.7124 | 프레임 단위 데이터셋 특성상 시계열 모델(LSTM)의 효과가 미미함. |
+| **V15** | Ensemble (DINO + ConvNeXt + EffB5) ❌ 결과 앙상블 | 0.7193 | ConvNeXt(Blur 증강)를 앙상블에 넣은 버전. 단일 모델로는 크게 오르지 않음. |
+| **V17** | Ensemble + Video Model (CNN+LSTM) ❌ 결과 앙상블 | 0.7124 | 시계열 모델을 더해도 점수가 내려감. |
 
 ### 💡 What Worked / What I Learned
 *   **(반성)** 점수를 가장 크게 올린 것은 Test Set pseudo-labeling이었지만, 이는 규정 위반이라 결과로 인정할 수 없다. 규정을 실험 설계의 첫 조건으로 두어야 했다.
