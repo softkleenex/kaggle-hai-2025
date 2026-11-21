@@ -1,55 +1,43 @@
 # 🕵️‍♂️ HAI 2025 Deepfake Detection Challenge
 
-![Rank](https://img.shields.io/badge/Rank-Top%209%25-brightgreen?style=flat-square&logo=kaggle)
-![Private Score](https://img.shields.io/badge/Private%20AUC-0.7040-blue?style=flat-square)
-![Public Score](https://img.shields.io/badge/Public%20AUC-0.7215-blue?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
 
 > **Competition:** [HAI 2025 Deepfake Detection Challenge](https://dacon.io/competitions/official/236628/overview/description) (Dacon)  
-> **Team:** softkleenex  
-> **Result:** 121st / 1,356 Teams (**Top 9%**)
+> **Team:** softkleenex (개인)
+
+## ⚠️ 먼저 밝혀 둘 것 — 최종 순위는 규정 위반 방법으로 얻은 점수입니다
+
+대회 규칙(`docs/constraints.md`)은 **평가 데이터(Test Set)를 학습에 쓰는 것**과 **여러 모델의 결과를 평균하는 앙상블**을 금지합니다.
+그런데 이 저장소의 최종 제출(Private AUC 0.70403, 121위/1,356팀)은 바로 그 두 가지 — Test Set pseudo-labeling과 결과 앙상블 — 로 얻은 점수입니다.
+규칙을 문서로 정리해 두고도 실험을 바꿀 때마다 그 기준에 비춰 보지 않은 것이 제 잘못입니다. 그래서 이 순위는 **성과로 내세우지 않습니다.**
+
+이 저장소는 그 과정과 실패를 그대로 남겨 둔 기록입니다. 규정 안에서 확인된 사실은 아래뿐입니다.
+
+| 규정 안에서 확인된 것 | 값 |
+|---|---|
+| 학습 데이터 | 공개 데이터 **140k Real and Fake Faces**(실제 사진 + StyleGAN 생성 얼굴, `scripts/download_data.py`) · 일부 실험에 Celeb-DF 추가 |
+| 단일 모델의 대회 테스트 AUC | 약 **0.49 ~ 0.64** (학습 데이터 검증셋에서는 높았지만 대회 데이터에서는 무작위 수준에 가까움) |
+| Celeb-DF를 더해 학습한 ConvNeXt 단일 모델 | 0.593 (`docs/SUBMISSION_HISTORY.csv`) |
+| 배운 것 | 학습 데이터와 대회 데이터의 생성 방식·촬영 환경 차이는 데이터를 늘리는 것만으로 넘지 못했다 |
+
+> 아래 표와 설명 가운데 **pseudo-labeling·TTA·앙상블·영상(LSTM) 모델**이 들어간 항목은 모두 규정 위반이거나 규정상 확인되지 않은 방법입니다. 재현하거나 참고할 때 이 점을 먼저 확인하세요.
+
+---
 
 ## 📌 Overview
-본 프로젝트는 생성형 AI로 만들어진 딥페이크 영상과 실제 영상을 구분하는 분류 모델을 개발하는 챌린지입니다.
-다양한 생성 기법(FaceSwap, Diffusion 등)에 대응하기 위해 **Transformer(DINOv2)와 CNN(EfficientNet, ConvNeXt)의 하이브리드 앙상블**을 구축하였으며, 특히 Test Dataset의 분포 차이(Domain Gap)를 극복하기 위한 **Pseudo-Labeling (Semi-supervised Learning)** 전략에 집중했습니다.
+생성형 AI로 만든 딥페이크와 실제 영상을 구분하는 분류 모델을 만드는 대회입니다. 얼굴을 잘라 낸 이미지를 DINOv2(ViT)·EfficientNet·ConvNeXt로 학습했습니다.
 
----
+## 🛠️ 시도한 방법 (규정 위반 여부 표시)
 
-## 🏆 Final Score
-| Metric | Score | Rank | Note |
-|:---:|:---:|:---:|:---|
-| **Private AUC** | **0.70403** | **121위** (Top 9%) | 최종 순위 |
-| **Public AUC** | **0.72151** | - | Pseudo-Labeling 적용 시 최고점 |
-
----
-
-## 🛠️ Solution Strategy
-
-### 1. Model Architecture (Ensemble)
-서로 다른 귀납적 편향(Inductive Bias)을 가진 모델을 결합하여 예측의 안정성을 확보했습니다.
-
-| Model | Architecture | Pretrained | Role | Weight |
-|:---|:---|:---|:---|:---:|
-| **DINOv2 Large** | ViT | ImageNet-21k | **[Main]** 전역적(Global) 특징 및 고수준 패턴 분석 | **0.5** |
-| **EfficientNet-B5** | CNN | ImageNet-1k | **[Adapter]** 국소적(Local) 텍스처 및 아티팩트 탐지 | **0.4** |
-| **ViT Base** | ViT | ImageNet-1k | **[Support]** 앙상블 다양성(Diversity) 강화 | **0.1** |
-| **ConvNeXt** | CNN | ImageNet-1k | **[Generalist]** Blur/Compression 등 화질 저하에 강건함 | - |
-
-### 2. Key Techniques
-#### 🔹 Pseudo-Labeling (Test Set Injection)
-*   **Problem:** 학습 데이터(FaceForensics++)와 테스트 데이터(Dacon Custom) 간의 도메인 차이 발생.
-*   **Solution:** 
-    1. 초기 앙상블 모델로 Test Set 추론.
-    2. 신뢰도(Confidence)가 높은 상위/하위 5% 데이터 추출.
-    3. 추출된 데이터를 학습 데이터(Train Set)에 **10배 Oversampling**하여 모델 재학습.
-*   **Result:** Public Score **0.67 → 0.72**로 비약적 상승.
-
-#### 🔹 Test-Time Augmentation (TTA)
-*   추론 시 `Horizontal Flip`, `Gaussian Blur`, `Sharpen` 등 5가지 증강을 적용하고 결과를 평균(Average)하여 예측 안정성 확보.
-
-#### 🔹 Blur-Breaker Training
-*   저화질 Fake 영상이 Real로 오분류되는 현상을 막기 위해, 학습 시 `Albumentations`의 `ImageCompression`, `MotionBlur`를 강하게 적용하여 **"화질이 나빠도 가짜일 수 있음"**을 학습시킴.
+| 방법 | 규정 | 메모 |
+|---|---|---|
+| DINOv2 / EfficientNet / ConvNeXt 단일 모델 학습 | ✅ 허용 | 공개 데이터(140k Real and Fake Faces, Celeb-DF)로 학습 |
+| 압축·모션블러 증강 (Blur-Breaker) | ✅ 허용 | 저화질 가짜가 진짜로 오분류되는 문제 대응. 단일 모델 점수는 크게 오르지 않음 |
+| Test Set pseudo-labeling (상위/하위 5% 추출 → 10배 oversampling) | ❌ **위반** (Test Set 학습 사용) | Public 0.67 → 0.72 상승의 원인. 성과로 쓰지 않음 |
+| 결과 앙상블 (DINO + EffB5 + ViT 가중 평균) | ❌ **위반** (결과 앙상블) | 최종 제출이 이 방식 |
+| TTA (5가지 증강 결과 평균) | ⚠️ 규정상 확인 필요 | 결과를 평균하므로 앙상블로 볼 여지 있음 |
+| 영상 모델 (CNN+LSTM) | ❌ 최종 제출에서 앙상블로 결합 | 점수 하락 |
 
 ---
 
@@ -79,14 +67,14 @@
 
 | Ver | Method | Score (Public) | Insight |
 |:---:|:---|:---:|:---|
-| **V2** | Baseline Ensemble (DINO+ViT+EffB4) | 0.6781 | 기본적인 앙상블만으로도 단일 모델 대비 우수함. |
-| **V7** | **Pseudo Labeling (3% Injection)** | **0.7038** | Test Set 도메인 적응이 점수 향상의 핵심임을 확인. |
-| **V10** | **Pseudo (10x) + FewShot** | **0.7215** | 과적합과 일반화 사이의 최적 균형점 도달. (Best) |
+| **V2** | Baseline Ensemble (DINO+ViT+EffB4) ❌ 결과 앙상블 | 0.6781 | 결과 앙상블은 규정상 금지. |
+| **V7** | Pseudo Labeling (3% Injection) ❌ 위반 | 0.7038 | Test Set을 학습에 쓴 결과라 성과로 보지 않음. |
+| **V10** | Pseudo (10x) + FewShot ❌ 위반 | 0.7215 | 위와 같음. |
 | **V15** | ConvNeXt (Blur Augmentation) | 0.7193 | 화질 증강이 일부 도움되나, 라벨 노이즈 문제 발생 가능성. |
 | **V17** | Video Model (CNN+LSTM) | 0.7124 | 프레임 단위 데이터셋 특성상 시계열 모델(LSTM)의 효과가 미미함. |
 
-### 💡 What Worked
-*   **Data-Centric Approach:** 모델 구조를 바꾸는 것보다, **데이터(Pseudo-Labeling)**를 어떻게 구성하느냐가 성능에 훨씬 큰 영향을 미침.
+### 💡 What Worked / What I Learned
+*   **(반성)** 점수를 가장 크게 올린 것은 Test Set pseudo-labeling이었지만, 이는 규정 위반이라 결과로 인정할 수 없다. 규정을 실험 설계의 첫 조건으로 두어야 했다.
 *   **Self-Supervised Learning:** 적은 데이터 환경에서는 DINOv2 같은 SSL 모델이 CNN보다 강력한 Feature Extractor 역할을 수행함.
 
 ### ⚠️ Challenges & Future Work
